@@ -102,7 +102,7 @@ let sdkLoadPromise: Promise<boolean> | null = null;
 export function loadKakaoMapSDK(): Promise<boolean> {
   if (sdkLoadPromise) return sdkLoadPromise;
 
-  const apiKey = import.meta.env.VITE_KAKAO_MAP_KEY;
+  const apiKey = import.meta.env.VITE_KAKAO_MAP_KEY || '99f0af6a6e5f3b3179a59ba5b15c912a';
   if (!apiKey) {
     sdkLoadPromise = Promise.resolve(false);
     return sdkLoadPromise;
@@ -229,5 +229,5 @@ export function normalizeRegion(region1: string, region2: string): string {
  * API 키가 설정되어 있는지 확인합니다.
  */
 export function hasKakaoMapKey(): boolean {
-  return !!import.meta.env.VITE_KAKAO_MAP_KEY;
+  return true;
 }
