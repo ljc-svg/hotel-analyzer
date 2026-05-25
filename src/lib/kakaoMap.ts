@@ -93,6 +93,9 @@ export interface AddressSearchResult {
   district: string; // 시군구
 }
 
+// 카카오맵 JavaScript API 키 (직접 설정)
+const KAKAO_MAP_API_KEY = '99f0af6a6e5f3b3179a59ba5b15c912a';
+
 // SDK 로딩 상태 관리
 let sdkLoadPromise: Promise<boolean> | null = null;
 
@@ -102,26 +105,28 @@ let sdkLoadPromise: Promise<boolean> | null = null;
 export function loadKakaoMapSDK(): Promise<boolean> {
   if (sdkLoadPromise) return sdkLoadPromise;
 
-  const apiKey = import.meta.env.VITE_KAKAO_MAP_KEY || '99f0af6a6e5f3b3179a59ba5b15c912a';
-  if (!apiKey) {
-    sdkLoadPromise = Promise.resolve(false);
-    return sdkLoadPromise;
-  }
-
   // 이미 로드된 경우
   if (window.kakao && window.kakao.maps) {
-    sdkLoadPromise = Promise.resolve(true);
+    sdkLoadPromise = new Promise<boolean>((resolve) => {
+      window.kakao.maps.load(() => {
+        resolve(true);
+      });
+    });
     return sdkLoadPromise;
   }
 
   sdkLoadPromise = new Promise<boolean>((resolve) => {
     const script = document.createElement('script');
-    script.src = `//dapi.kakao.com/v2/maps/sdk.js?appkey=${apiKey}&libraries=services&autoload=false`;
+    script.src = `//dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_MAP_API_KEY}&libraries=services&autoload=false`;
     script.async = true;
     script.onload = () => {
-      window.kakao.maps.load(() => {
-        resolve(true);
-      });
+      if (window.kakao && window.kakao.maps) {
+        window.kakao.maps.load(() => {
+          resolve(true);
+        });
+      } else {
+        resolve(false);
+      }
     };
     script.onerror = () => {
       sdkLoadPromise = null;
@@ -150,7 +155,7 @@ export function searchAddress(query: string): Promise<AddressSearchResult[]> {
           address: item.road_address?.address_name || item.address.address_name,
           lat: parseFloat(item.y),
           lng: parseFloat(item.x),
-          region: normalizeRegion(item.address.region_1depth_name, item.address.region_2depth_name),
+          region: normalizeRegion(item.address.region_1depth_name),
           district: item.address.region_2depth_name,
         }));
         resolve(results);
@@ -163,17 +168,14 @@ export function searchAddress(query: string): Promise<AddressSearchResult[]> {
 
 /**
  * 지역명을 Cap Rate 매트릭스의 키로 정규화합니다.
- * 예: "서울특별시" → "서울", "경기도 가평군" → "가평"
+ * 17개 시·도 기준: 서울, 부산, 대구, 인천, 광주, 대전, 울산, 세종, 경기, 강원, 충북, 충남, 전북, 전남, 경북, 경남, 제주
  */
-export function normalizeRegion(region1: string, region2: string): string {
-  // Cap Rate 테이블에 있는 지역 목록
+export function normalizeRegion(region1: string): string {
   const REGION_MAP: Record<string, string> = {
     '서울특별시': '서울',
     '서울': '서울',
     '부산광역시': '부산',
     '부산': '부산',
-    '제주특별자치도': '제주',
-    '제주': '제주',
     '대구광역시': '대구',
     '대구': '대구',
     '인천광역시': '인천',
@@ -184,41 +186,30 @@ export function normalizeRegion(region1: string, region2: string): string {
     '대전': '대전',
     '울산광역시': '울산',
     '울산': '울산',
+    '세종특별자치시': '세종',
+    '세종': '세종',
+    '경기도': '경기',
+    '경기': '경기',
+    '강원도': '강원',
+    '강원특별자치도': '강원',
+    '강원': '강원',
+    '충청북도': '충북',
+    '충북': '충북',
+    '충청남도': '충남',
+    '충남': '충남',
+    '전라북도': '전북',
+    '전북특별자치도': '전북',
+    '전북': '전북',
+    '전라남도': '전남',
+    '전남': '전남',
+    '경상북도': '경북',
+    '경북': '경북',
+    '경상남도': '경남',
+    '경남': '경남',
+    '제주특별자치도': '제주',
+    '제주': '제주',
   };
 
-  // 시군구 기반 매핑 (경기도 등)
-  const DISTRICT_MAP: Record<string, string> = {
-    '수원시': '수원',
-    '수원': '수원',
-    '성남시': '성남',
-    '성남': '성남',
-    '고양시': '고양',
-    '고양': '고양',
-    '용인시': '용인',
-    '용인': '용인',
-    '파주시': '파주',
-    '파주': '파주',
-    '가평군': '가평',
-    '가평': '가평',
-    '양평군': '양평',
-    '양평': '양평',
-    '강릉시': '강릉',
-    '강릉': '강릉',
-    '경주시': '경주',
-    '경주': '경주',
-    '여수시': '여수',
-    '여수': '여수',
-  };
-
-  // 시군구 우선 매칭
-  if (region2) {
-    // "수원시 장안구" → "수원시" 추출
-    const districtBase = region2.split(' ')[0];
-    if (DISTRICT_MAP[districtBase]) return DISTRICT_MAP[districtBase];
-    if (DISTRICT_MAP[region2]) return DISTRICT_MAP[region2];
-  }
-
-  // 시도 매칭
   if (REGION_MAP[region1]) return REGION_MAP[region1];
 
   // 매칭 실패 시 기본값 (서울)
@@ -229,5 +220,5 @@ export function normalizeRegion(region1: string, region2: string): string {
  * API 키가 설정되어 있는지 확인합니다.
  */
 export function hasKakaoMapKey(): boolean {
-  return true;
+  return !!KAKAO_MAP_API_KEY;
 }
